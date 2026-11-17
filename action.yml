@@ -1,0 +1,44 @@
+name: Pages Analytics
+description: Inject an analytics snippet into a built static site, using an ID from your CI environment.
+author: javisperez
+branding:
+  icon: bar-chart-2
+  color: blue
+
+inputs:
+  dir:
+    description: Directory containing the built site (for example dist or _site).
+    required: true
+  provider:
+    description: Analytics provider (ga4 or plausible).
+    required: false
+    default: ga4
+  id:
+    description: Measurement ID or site domain. When empty the action does nothing.
+    required: false
+    default: ""
+  host:
+    description: Origin of a self-hosted instance (optional).
+    required: false
+    default: ""
+  strict:
+    description: Fail the job instead of skipping when no ID is set.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Inject analytics
+      shell: bash
+      # Inputs go through env vars, never interpolated into the script.
+      env:
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        ANALYTICS_PROVIDER: ${{ inputs.provider }}
+        ANALYTICS_ID: ${{ inputs.id }}
+        ANALYTICS_HOST: ${{ inputs.host }}
+      run: |
+        args=(inject "$INPUT_DIR")
+        if [ "$INPUT_STRICT" = "true" ]; then args+=(--strict); fi
+        node "$GITHUB_ACTION_PATH/dist/bin.js" "${args[@]}"
