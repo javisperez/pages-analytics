@@ -36,6 +36,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "prepare": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm run build && pnpm run test"
   },
   "devDependencies": {
