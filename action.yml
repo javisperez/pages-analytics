@@ -21,6 +21,10 @@ inputs:
     description: Origin of a self-hosted instance (optional).
     required: false
     default: ""
+  version:
+    description: Version of the pages-analytics npm package to run.
+    required: false
+    default: "0.1.1"
   strict:
     description: Fail the job instead of skipping when no ID is set.
     required: false
@@ -35,10 +39,11 @@ runs:
       env:
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_VERSION: ${{ inputs.version }}
         ANALYTICS_PROVIDER: ${{ inputs.provider }}
         ANALYTICS_ID: ${{ inputs.id }}
         ANALYTICS_HOST: ${{ inputs.host }}
       run: |
         args=(inject "$INPUT_DIR")
         if [ "$INPUT_STRICT" = "true" ]; then args+=(--strict); fi
-        node "$GITHUB_ACTION_PATH/dist/bin.js" "${args[@]}"
+        npx --yes "pages-analytics@$INPUT_VERSION" "${args[@]}"

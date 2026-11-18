@@ -1,6 +1,6 @@
 {
   "name": "pages-analytics",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Inject an analytics snippet into your built static site at deploy time, using an ID from your CI environment instead of your source code.",
   "keywords": [
     "analytics",
@@ -12,6 +12,15 @@
     "ci"
   ],
   "license": "MIT",
+  "author": "Javis Pérez",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/javisperez/pages-analytics.git"
+  },
+  "homepage": "https://github.com/javisperez/pages-analytics#readme",
+  "bugs": {
+    "url": "https://github.com/javisperez/pages-analytics/issues"
+  },
   "packageManager": "pnpm@10.33.0",
   "type": "module",
   "bin": {

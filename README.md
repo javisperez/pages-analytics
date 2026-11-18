@@ -101,7 +101,7 @@ A fork deploying to its own Pages won't have that variable, so it ships without 
     id: ${{ vars.ANALYTICS_ID }}
 ```
 
-> The action runs the compiled `dist/` from the tagged release, so release tags must include the built `dist/`. This is not set up yet (see Roadmap); until then use the `npx` form.
+> The action runs the matching `pages-analytics` release from npm (`npx pages-analytics@<version>`), so it needs no build step. Pin a different release with the `version` input.
 
 ## Programmatic use
 
@@ -117,7 +117,7 @@ This tool only inserts the provider's standard snippet. Whether you need a conse
 
 ## Roadmap
 
-- [ ] Publish to npm and set up release tags that include `dist/` for the Action
+- [x] Publish to npm; the Action runs the published package
 - [ ] More providers: Umami, GoatCounter, Cloudflare Web Analytics
 - [ ] Consent-gated loading
 - [ ] Optional tiny `track(name)` helper that no-ops when no analytics is injected
