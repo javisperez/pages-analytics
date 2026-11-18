@@ -14,6 +14,34 @@ Works with anything that outputs HTML (Vite, Astro, Jekyll, plain files) and is 
 
 ## Quick start
 
+### Vite
+
+```bash
+pnpm add -D pages-analytics
+```
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import pagesAnalytics from "pages-analytics/vite";
+
+export default defineConfig({
+  plugins: [pagesAnalytics()],
+});
+```
+
+Then give your deploy's build step the ID. That is the only workflow change:
+
+```yaml
+- run: pnpm build
+  env:
+    ANALYTICS_ID: ${{ secrets.ANALYTICS_ID }}   # or vars.ANALYTICS_ID
+```
+
+The plugin only runs for `vite build` (never the dev server), covers every HTML entry, does nothing without an ID, and **fails the build** on an invalid ID, host or provider so a typo never ships silently. Options (`provider`, `id`, `host`) override the environment variables.
+
+### Any other tool
+
 ```bash
 npx pages-analytics inject dist
 ```
