@@ -24,7 +24,7 @@ inputs:
   version:
     description: Version of the pages-analytics npm package to run.
     required: false
-    default: "0.1.1"
+    default: "0.2.0"
   strict:
     description: Fail the job instead of skipping when no ID is set.
     required: false
