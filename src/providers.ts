@@ -34,8 +34,12 @@ const plausible: Provider = {
   name: "plausible",
   idHint: "the site domain registered in Plausible, such as example.com",
   validateId: (id) => DOMAIN_PATTERN.test(id),
+  // The inline stub queues track() calls made before the deferred script has loaded.
   snippet: (id, { host }) =>
-    `<script defer data-domain="${id}" src="${host ?? "https://plausible.io"}/js/script.js"></script>`,
+    [
+      `<script>window.plausible=window.plausible||function(){(window.plausible.q=window.plausible.q||[]).push(arguments)}</script>`,
+      `<script defer data-domain="${id}" src="${host ?? "https://plausible.io"}/js/script.js"></script>`,
+    ].join("\n"),
 };
 
 export const providers: Readonly<Record<string, Provider>> = {

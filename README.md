@@ -79,6 +79,33 @@ Behavior:
 - **No ID, no change.** An unset or empty ID prints a note and exits 0 (use `--strict` to fail instead).
 - **Strict validation.** The ID and host are checked against a strict pattern before anything is written, so a bad CI variable can't inject arbitrary markup. The ID is never printed in logs.
 
+## Tracking events
+
+`pages-analytics/track` sends custom events through whichever provider was injected (`gtag` for GA4, `plausible` for Plausible). It is browser-safe, has no dependencies, and **does nothing when no snippet was injected** (dev server, forks, local builds), so there is no "is analytics on?" check to write. It never throws.
+
+```ts
+import { createTracker } from "pages-analytics/track";
+
+interface Events {
+  palette_exported: { format: "css" | "tailwind-v4" | "json" };
+  app_opened: undefined; // events without params
+}
+
+export const track = createTracker<Events>();
+
+track("palette_exported", { format: "css" }); // checked at compile time
+track("palette_exportd", { format: "css" });  // type error
+```
+
+There is also an untyped `track(name, params?)` if you don't want an event map.
+
+Notes:
+
+- Params are `string | number | boolean` values.
+- **GA4:** event params only show up in reports after you register them as custom dimensions (Admin → Custom definitions). Event names max 40 characters (letters, digits, underscores), param values max 100.
+- **Plausible:** params are sent as custom props. The injected snippet includes the small queue stub Plausible recommends, so events fired before its script loads are not lost.
+- Use `debug_mode` / GA4 DebugView to check events while developing.
+
 ## GitHub Pages workflow
 
 Store the ID as a repository **variable** (Settings → Secrets and variables → Actions → Variables) named `ANALYTICS_ID`. A full example for a Vite project is in [`examples/deploy-pages.yml`](examples/deploy-pages.yml). The important part:
@@ -120,7 +147,7 @@ This tool only inserts the provider's standard snippet. Whether you need a conse
 - [x] Publish to npm; the Action runs the published package
 - [ ] More providers: Umami, GoatCounter, Cloudflare Web Analytics
 - [ ] Consent-gated loading
-- [ ] Optional tiny `track(name)` helper that no-ops when no analytics is injected
+- [x] Tiny `track()` helper that no-ops when no analytics is injected
 - [ ] Support for a custom snippet file
 
 ## Development
