@@ -1,6 +1,6 @@
 {
   "name": "pages-analytics",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Inject an analytics snippet into your built static site at deploy time, using an ID from your CI environment instead of your source code.",
   "keywords": [
     "analytics",

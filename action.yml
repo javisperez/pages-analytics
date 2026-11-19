@@ -22,7 +22,7 @@ inputs:
     required: false
     default: ""
   consent:
-    description: Collect nothing until the page grants consent (ga4 only). Requires a release that supports consent (set `version`).
+    description: Collect nothing until the page grants consent (ga4 only).
     required: false
     default: "false"
   consent-pages:
@@ -32,7 +32,7 @@ inputs:
   version:
     description: Version of the pages-analytics npm package to run.
     required: false
-    default: "0.2.0"
+    default: "0.3.0"
   strict:
     description: Fail the job instead of skipping when no ID is set.
     required: false
