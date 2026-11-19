@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTracker, track } from "../src/track.js";
+import { CONSENT_STORAGE_KEY } from "../src/consent.js";
+import { createTracker, getConsent, setConsent, track } from "../src/track.js";
 import { getProvider } from "../src/providers.js";
 
 afterEach(() => {
@@ -55,6 +56,82 @@ describe("track", () => {
     win.gtag = gtag;
     t("ping");
     expect(gtag).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("setConsent / getConsent", () => {
+  const makeStorage = (initial: Record<string, string> = {}) => {
+    const data = { ...initial };
+    return {
+      data,
+      getItem: (key: string) => data[key] ?? null,
+      setItem: (key: string, value: string) => void (data[key] = value),
+    };
+  };
+
+  it("updates GA4 consent for analytics only and remembers the choice", () => {
+    const gtag = vi.fn();
+    const localStorage = makeStorage();
+    vi.stubGlobal("window", { gtag, localStorage });
+
+    setConsent(true);
+    expect(gtag).toHaveBeenCalledWith("consent", "update", { analytics_storage: "granted" });
+    expect(localStorage.data["pages-analytics:consent"]).toBe("granted");
+    expect(getConsent()).toBe("granted");
+
+    setConsent(false);
+    expect(gtag).toHaveBeenLastCalledWith("consent", "update", { analytics_storage: "denied" });
+    expect(getConsent()).toBe("denied");
+  });
+
+  it("is a silent no-op when nothing was injected", () => {
+    const localStorage = makeStorage();
+    vi.stubGlobal("window", { localStorage });
+    expect(() => setConsent(true)).not.toThrow();
+    expect(localStorage.data).toEqual({});
+  });
+
+  it("is a no-op outside the browser", () => {
+    expect(() => setConsent(true)).not.toThrow();
+    expect(getConsent()).toBeUndefined();
+  });
+
+  it("never throws when gtag throws, and still saves the choice", () => {
+    const localStorage = makeStorage();
+    vi.stubGlobal("window", {
+      gtag: () => {
+        throw new Error("boom");
+      },
+      localStorage,
+    });
+    expect(() => setConsent(true)).not.toThrow();
+    expect(getConsent()).toBe("granted");
+  });
+
+  it("survives blocked storage and still updates consent for this page view", () => {
+    const gtag = vi.fn();
+    const blocked = {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("denied");
+      },
+    };
+    vi.stubGlobal("window", { gtag, localStorage: blocked });
+    expect(() => setConsent(true)).not.toThrow();
+    expect(gtag).toHaveBeenCalledTimes(1);
+    expect(getConsent()).toBeUndefined();
+  });
+
+  it("ignores junk in storage", () => {
+    vi.stubGlobal("window", { localStorage: makeStorage({ "pages-analytics:consent": "maybe" }) });
+    expect(getConsent()).toBeUndefined();
+  });
+
+  it("uses the same storage key the injected snippet reads", () => {
+    const snippet = getProvider("ga4").snippet("G-ABC123XYZ9", { consent: true });
+    expect(snippet).toContain(`localStorage.getItem("${CONSENT_STORAGE_KEY}")`);
   });
 });
 

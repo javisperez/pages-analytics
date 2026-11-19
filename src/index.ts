@@ -1,6 +1,6 @@
 export { injectSnippet, START_MARKER, END_MARKER } from "./inject.js";
 export type { InjectOutcome, InjectResult } from "./inject.js";
-export { injectDir, buildSnippet } from "./inject-dir.js";
+export { injectDir, buildSnippet, createSnippetPicker } from "./inject-dir.js";
 export type {
   InjectConfig,
   InjectDirOptions,

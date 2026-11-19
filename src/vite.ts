@@ -1,5 +1,10 @@
 import type { Plugin } from "vite";
-import { buildSnippet, type InjectConfig } from "./inject-dir.js";
+import {
+  createSnippetPicker,
+  parseFlag,
+  parseList,
+  type InjectConfig,
+} from "./inject-dir.js";
 import { injectSnippet } from "./inject.js";
 
 export interface PagesAnalyticsOptions {
@@ -9,6 +14,10 @@ export interface PagesAnalyticsOptions {
   id?: string;
   /** Origin of a self-hosted instance. Falls back to $ANALYTICS_HOST. */
   host?: string;
+  /** Collect nothing until the page grants consent (ga4 only). Falls back to $ANALYTICS_CONSENT. */
+  consent?: boolean;
+  /** Only gate pages matching these globs, e.g. `["app/**"]`. Falls back to $ANALYTICS_CONSENT_PAGES. */
+  consentPages?: string[];
 }
 
 function resolveConfig(options: PagesAnalyticsOptions): InjectConfig | undefined {
@@ -19,6 +28,8 @@ function resolveConfig(options: PagesAnalyticsOptions): InjectConfig | undefined
     provider: (options.provider ?? env.ANALYTICS_PROVIDER ?? "ga4").trim(),
     id,
     host: (options.host ?? env.ANALYTICS_HOST ?? "").trim() || undefined,
+    consent: options.consent ?? parseFlag(env.ANALYTICS_CONSENT),
+    consentPages: options.consentPages ?? parseList(env.ANALYTICS_CONSENT_PAGES),
   };
 }
 
@@ -30,7 +41,7 @@ function resolveConfig(options: PagesAnalyticsOptions): InjectConfig | undefined
  * - An invalid ID or host fails the build, so a typo never ships silently.
  */
 export default function pagesAnalytics(options: PagesAnalyticsOptions = {}): Plugin {
-  let snippet: string | undefined;
+  let pickSnippet: ((file: string) => string) | undefined;
 
   return {
     name: "pages-analytics",
@@ -41,13 +52,14 @@ export default function pagesAnalytics(options: PagesAnalyticsOptions = {}): Plu
         config.logger.info("pages-analytics: no ID set (ANALYTICS_ID), skipping.");
         return;
       }
-      snippet = buildSnippet(resolved); // throws on a bad ID/host/provider
+      pickSnippet = createSnippetPicker(resolved); // throws on a bad ID/host/provider/consent
     },
     transformIndexHtml: {
       order: "post",
-      handler(html) {
-        if (!snippet) return html;
-        return injectSnippet(html, snippet).html;
+      handler(html, ctx) {
+        if (!pickSnippet) return html;
+        // ctx.path is the page's URL path, e.g. "/app/index.html"; globs are site-root relative.
+        return injectSnippet(html, pickSnippet(ctx.path.replace(/^\//, ""))).html;
       },
     },
   };

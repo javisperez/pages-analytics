@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -60,6 +60,57 @@ describe("cli", () => {
     const html = await readFile(join(root, "index.html"), "utf8");
     expect(html).toContain("plausible.io");
     expect(html).not.toContain("G-ABC123XYZ9");
+  });
+
+  describe("consent", () => {
+    const ID = { ANALYTICS_ID: "G-ABC123XYZ9" };
+    const gated = async () =>
+      (await readFile(join(root, "index.html"), "utf8")).includes('gtag("consent","default"');
+
+    it("is off by default", async () => {
+      await main(["inject", root], ID, out);
+      expect(await gated()).toBe(false);
+    });
+
+    it("turns on with --consent", async () => {
+      expect(await main(["inject", root, "--consent"], ID, out)).toBe(0);
+      expect(await gated()).toBe(true);
+    });
+
+    it('turns on with ANALYTICS_CONSENT=true and stays off for "false"', async () => {
+      await main(["inject", root], { ...ID, ANALYTICS_CONSENT: "true" }, out);
+      expect(await gated()).toBe(true);
+      await writeFile(join(root, "index.html"), PAGE);
+      await main(["inject", root], { ...ID, ANALYTICS_CONSENT: "false" }, out);
+      expect(await gated()).toBe(false);
+    });
+
+    it("gates only matching pages with --consent-pages (repeatable)", async () => {
+      await mkdir(join(root, "app"));
+      await mkdir(join(root, "tools"));
+      await writeFile(join(root, "app/index.html"), PAGE);
+      await writeFile(join(root, "tools/index.html"), PAGE);
+      const args = ["inject", root, "--consent-pages", "app/**", "--consent-pages", "tools/**"];
+      expect(await main(args, ID, out)).toBe(0);
+      expect(await readFile(join(root, "app/index.html"), "utf8")).toContain("consent");
+      expect(await readFile(join(root, "tools/index.html"), "utf8")).toContain("consent");
+      expect(await gated()).toBe(false);
+    });
+
+    it("reads ANALYTICS_CONSENT_PAGES as a comma-separated list", async () => {
+      await mkdir(join(root, "app"));
+      await writeFile(join(root, "app/index.html"), PAGE);
+      await main(["inject", root], { ...ID, ANALYTICS_CONSENT_PAGES: " app/** , other/** " }, out);
+      expect(await readFile(join(root, "app/index.html"), "utf8")).toContain("consent");
+      expect(await gated()).toBe(false);
+    });
+
+    it("exits 1 for a provider without consent support", async () => {
+      const args = ["inject", root, "--provider", "plausible", "--id", "example.com", "--consent"];
+      expect(await main(args, {}, out)).toBe(1);
+      expect(errors.join("\n")).toMatch(/Consent mode is not supported/);
+      expect(await readFile(join(root, "index.html"), "utf8")).toBe(PAGE);
+    });
   });
 
   it("honors --dry-run", async () => {

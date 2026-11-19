@@ -62,6 +62,9 @@ pages-analytics inject <dir> [options]
   --provider <name>   ga4 | plausible   (default: ga4, or $ANALYTICS_PROVIDER)
   --id <id>           Site/measurement ID (default: $ANALYTICS_ID)
   --host <origin>     Self-hosted instance origin (or $ANALYTICS_HOST)
+  --consent           Collect nothing until the page grants consent (GA4, see below)
+  --consent-pages <glob>
+                      Only gate pages matching the glob; repeatable, implies --consent
   --dry-run           Show what would change without writing files
   --strict            Fail instead of skipping when no ID is set
 ```
@@ -140,13 +143,48 @@ await injectDir("dist", { provider: "ga4", id: process.env.ANALYTICS_ID! });
 
 ## Privacy and consent
 
-This tool only inserts the provider's standard snippet. Whether you need a consent banner depends on the provider and where your visitors are. GA4 generally needs consent in the EU; cookieless options such as Plausible generally don't. Check the rules that apply to you. A consent-gated mode is on the roadmap.
+By default this tool only inserts the provider's standard snippet. Whether you need a consent banner depends on the provider and where your visitors are. GA4 generally needs consent in the EU; cookieless options such as Plausible generally don't. Check the rules that apply to you.
+
+### Consent mode (GA4)
+
+For pages that need consent, turn on consent mode. No custom script is needed in your pages:
+
+```bash
+npx pages-analytics inject dist --consent                      # every page
+npx pages-analytics inject dist --consent-pages "app/**"       # only these pages
+```
+
+| | CLI | Environment | Vite plugin | Action input |
+|---|---|---|---|---|
+| All pages | `--consent` | `ANALYTICS_CONSENT=true` | `consent: true` | `consent: true` |
+| Some pages | `--consent-pages <glob>` (repeatable) | `ANALYTICS_CONSENT_PAGES=app/**,tools/**` | `consentPages: ["app/**"]` | `consent-pages: app/**,tools/**` |
+
+`consentPages` implies consent for the matching pages only; every other page still gets the regular snippet. Globs match the page's path relative to the site root (`*` within a folder, `**` across folders, `?` one character), e.g. `app/**` or `**/index.html`.
+
+On a gated page the injected snippet follows [Google Consent Mode v2](https://developers.google.com/tag-platform/security/guides/consent): all consent signals start as `denied` *before* `config`, so nothing identifying is stored until the visitor agrees. Your consent banner then reports the choice with one call:
+
+```ts
+import { getConsent, setConsent } from "pages-analytics/track";
+
+if (getConsent() === undefined) showBanner(); // no saved choice yet
+
+onAccept(() => setConsent(true));
+onReject(() => setConsent(false));
+```
+
+- `setConsent(true)` grants **analytics storage only**. Advertising signals (`ad_storage`, `ad_user_data`, `ad_personalization`) always stay denied.
+- The choice is saved in `localStorage` and replayed on later page loads before the first hit, so returning visitors who accepted are not treated as denied. `setConsent(false)` withdraws it.
+- Like `track`, both functions do nothing when no snippet was injected and never throw.
+- While denied, GA4 sends cookieless pings and models the gap in reports; it does not stop all requests to Google. If you need *no* request before consent, this isn't that mode.
+- **Plausible** has no consent mode yet. Asking for consent with it fails the run instead of quietly shipping an ungated tracker.
+- Consent mode is a technical mechanism, not legal advice. Whether and where you need it is up to you.
 
 ## Roadmap
 
 - [x] Publish to npm; the Action runs the published package
 - [ ] More providers: Umami, GoatCounter, Cloudflare Web Analytics
-- [ ] Consent-gated loading
+- [x] Consent mode for GA4 (per page or site-wide), with a `setConsent()` helper
+- [ ] Consent mode for Plausible, and region-limited defaults (e.g. EU only)
 - [x] Tiny `track()` helper that no-ops when no analytics is injected
 - [ ] Support for a custom snippet file
 

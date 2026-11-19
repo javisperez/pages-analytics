@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
-import { injectDir } from "./inject-dir.js";
+import { injectDir, parseFlag, parseList } from "./inject-dir.js";
 import { providers } from "./providers.js";
 
 export interface Output {
@@ -17,6 +17,10 @@ Options
   --provider <name>   ${Object.keys(providers).join(" | ")} (default: ga4, or $ANALYTICS_PROVIDER)
   --id <id>           Site/measurement ID (default: $ANALYTICS_ID)
   --host <origin>     Self-hosted instance origin, e.g. https://stats.example.com (or $ANALYTICS_HOST)
+  --consent           Collect nothing until the page grants consent (ga4 only, or $ANALYTICS_CONSENT=true)
+  --consent-pages <glob>
+                      Only gate pages matching the glob, e.g. "app/**". Repeatable; implies --consent
+                      (or comma-separated in $ANALYTICS_CONSENT_PAGES)
   --dry-run           Show what would change without writing files
   --strict            Fail instead of skipping when no ID is set
   -v, --version
@@ -44,6 +48,8 @@ export async function main(
         provider: { type: "string" },
         id: { type: "string" },
         host: { type: "string" },
+        consent: { type: "boolean" },
+        "consent-pages": { type: "string", multiple: true },
         "dry-run": { type: "boolean" },
         strict: { type: "boolean" },
         help: { type: "boolean", short: "h" },
@@ -81,10 +87,13 @@ export async function main(
   const provider = (values.provider ?? env.ANALYTICS_PROVIDER ?? "ga4").trim();
   const host = (values.host ?? env.ANALYTICS_HOST ?? "").trim() || undefined;
 
+  const consent = values.consent ?? parseFlag(env.ANALYTICS_CONSENT);
+  const consentPages = values["consent-pages"] ?? parseList(env.ANALYTICS_CONSENT_PAGES);
+
   try {
     const { files, counts } = await injectDir(
       dir,
-      { provider, id, host },
+      { provider, id, host, consent, consentPages },
       { dryRun: values["dry-run"] },
     );
     const prefix = values["dry-run"] ? "pages-analytics (dry run)" : "pages-analytics";

@@ -21,6 +21,14 @@ inputs:
     description: Origin of a self-hosted instance (optional).
     required: false
     default: ""
+  consent:
+    description: Collect nothing until the page grants consent (ga4 only). Requires a release that supports consent (set `version`).
+    required: false
+    default: "false"
+  consent-pages:
+    description: Comma-separated globs of pages to gate behind consent, e.g. "app/**,tools/**". Implies consent for those pages only.
+    required: false
+    default: ""
   version:
     description: Version of the pages-analytics npm package to run.
     required: false
@@ -43,6 +51,8 @@ runs:
         ANALYTICS_PROVIDER: ${{ inputs.provider }}
         ANALYTICS_ID: ${{ inputs.id }}
         ANALYTICS_HOST: ${{ inputs.host }}
+        ANALYTICS_CONSENT: ${{ inputs.consent }}
+        ANALYTICS_CONSENT_PAGES: ${{ inputs.consent-pages }}
       run: |
         args=(inject "$INPUT_DIR")
         if [ "$INPUT_STRICT" = "true" ]; then args+=(--strict); fi

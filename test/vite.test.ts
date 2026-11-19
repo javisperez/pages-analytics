@@ -70,6 +70,34 @@ describe("vite plugin (real build)", () => {
     expect(index).not.toContain("G-ABC123XYZ9");
   });
 
+  it("gates every page with `consent`", async () => {
+    vi.stubEnv("ANALYTICS_ID", "G-ABC123XYZ9");
+    const { index, other } = await runBuild(pagesAnalytics({ consent: true }));
+    for (const html of [index, other]) expect(html).toContain('gtag("consent","default"');
+  });
+
+  it("gates only pages matching `consentPages`, using the path from the site root", async () => {
+    vi.stubEnv("ANALYTICS_ID", "G-ABC123XYZ9");
+    const { index, other } = await runBuild(pagesAnalytics({ consentPages: ["other/**"] }));
+    expect(other).toContain('gtag("consent","default"');
+    expect(index).toContain("G-ABC123XYZ9");
+    expect(index).not.toContain("consent");
+  });
+
+  it("reads consent settings from the environment", async () => {
+    vi.stubEnv("ANALYTICS_ID", "G-ABC123XYZ9");
+    vi.stubEnv("ANALYTICS_CONSENT_PAGES", "other/**");
+    const { index, other } = await runBuild();
+    expect(other).toContain("consent");
+    expect(index).not.toContain("consent");
+  });
+
+  it("fails the build when consent is requested for a provider without it", async () => {
+    await expect(
+      runBuild(pagesAnalytics({ provider: "plausible", id: "example.com", consent: true })),
+    ).rejects.toThrow(/Consent mode is not supported/);
+  });
+
   it("fails the build on an invalid ID", async () => {
     vi.stubEnv("ANALYTICS_ID", "not-a-real-id");
     await expect(runBuild()).rejects.toThrow(/Invalid ga4 ID/);

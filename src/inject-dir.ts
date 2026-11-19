@@ -1,5 +1,5 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { injectSnippet, type InjectOutcome } from "./inject.js";
 import { getProvider, validateHost } from "./providers.js";
 
@@ -7,6 +7,17 @@ export interface InjectConfig {
   provider: string;
   id: string;
   host?: string;
+  /**
+   * Gate collection behind consent on every page: nothing is collected until the page calls
+   * `setConsent(true)` from `pages-analytics/track`. GA4 only for now.
+   */
+  consent?: boolean;
+  /**
+   * Gate only the pages matching these globs (relative to the injected directory, e.g.
+   * `app/**`). Other pages get the regular snippet. Implies `consent`.
+   * `*` matches within a path segment, `**` across segments, `?` one character.
+   */
+  consentPages?: string[];
 }
 
 export interface InjectDirOptions {
@@ -42,8 +53,50 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
-/** Validate the config and build the snippet. Throws a readable Error on bad input. */
-export function buildSnippet(config: InjectConfig): string {
+/** Parse an on/off environment variable. Anything but true/1/yes/on is off. */
+export function parseFlag(value: string | undefined): boolean {
+  return /^(true|1|yes|on)$/i.test((value ?? "").trim());
+}
+
+/** Split a comma-separated environment variable, dropping blanks. */
+export function parseList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/** Compile a path glob: `*` within a segment, `**` across segments, `?` one character. */
+function globToRegExp(glob: string): RegExp {
+  let source = "";
+  for (let i = 0; i < glob.length; i += 1) {
+    const char = glob[i]!;
+    if (char === "*") {
+      if (glob[i + 1] === "*") {
+        i += 1;
+        if (glob[i + 1] === "/") {
+          i += 1;
+          source += "(?:.*/)?"; // `**/` also matches zero directories
+        } else {
+          source += ".*";
+        }
+      } else {
+        source += "[^/]*";
+      }
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += char.replace(/[.+^${}()|[\]\\/]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${source}$`);
+}
+
+/**
+ * Validate the config and return a function that picks the snippet for a page, given its path
+ * relative to the site root (e.g. `app/index.html`). Throws a readable Error on bad input.
+ */
+export function createSnippetPicker(config: InjectConfig): (file: string) => string {
   const provider = getProvider(config.provider);
   if (!provider.validateId(config.id)) {
     throw new Error(`Invalid ${provider.name} ID: expected ${provider.idHint}.`);
@@ -53,7 +106,27 @@ export function buildSnippet(config: InjectConfig): string {
       "Invalid host: expected an https origin without a path, e.g. https://stats.example.com",
     );
   }
-  return provider.snippet(config.id, { host: config.host });
+
+  const patterns = (config.consentPages ?? []).map((glob) => globToRegExp(glob.replace(/^\.?\//, "")));
+  const gated = config.consent === true || patterns.length > 0;
+  if (gated && !provider.supportsConsent) {
+    // Fail rather than quietly ship a tracker that ignores the request for consent.
+    throw new Error(`Consent mode is not supported for ${provider.name} yet.`);
+  }
+
+  const plain = provider.snippet(config.id, { host: config.host });
+  if (!gated) return () => plain;
+  const withConsent = provider.snippet(config.id, { host: config.host, consent: true });
+  if (patterns.length === 0) return () => withConsent;
+  return (file) => (patterns.some((pattern) => pattern.test(file)) ? withConsent : plain);
+}
+
+/**
+ * Validate the config and build one snippet for every page. Throws a readable Error on bad input.
+ * With `consentPages` set, use `createSnippetPicker` to get the per-page choice.
+ */
+export function buildSnippet(config: InjectConfig): string {
+  return createSnippetPicker({ ...config, consentPages: undefined })("");
 }
 
 export async function injectDir(
@@ -61,7 +134,7 @@ export async function injectDir(
   config: InjectConfig,
   options: InjectDirOptions = {},
 ): Promise<InjectDirResult> {
-  const snippet = buildSnippet(config);
+  const pickSnippet = createSnippetPicker(config);
 
   let info;
   try {
@@ -80,13 +153,14 @@ export async function injectDir(
   };
 
   for await (const path of walk(dir)) {
+    const file = relative(dir, path).split(sep).join("/");
     const original = await readFile(path, "utf8");
-    const { html, outcome } = injectSnippet(original, snippet);
+    const { html, outcome } = injectSnippet(original, pickSnippet(file));
     if ((outcome === "inserted" || outcome === "updated") && !options.dryRun) {
       await writeFile(path, html, "utf8");
     }
     counts[outcome] += 1;
-    files.push({ file: relative(dir, path), outcome });
+    files.push({ file, outcome });
   }
 
   return { files, counts };
